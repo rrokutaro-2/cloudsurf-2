@@ -326,7 +326,7 @@ new Promise((resolve) => {
     // runtime is already connected or auto-connects — that is fine, we
     // proceed either way.
     log('Checking for "Connect" button (pre-step) ...');
-    const connectResult = await page.evaluate(scriptClickConnect);
+    // const connectResult = await page.evaluate(scriptClickConnect);
     log(`Connect button: ${connectResult}`);
     if (connectResult === 'clicked') {
       // Brief pause to let the connection handshake start before Run all
@@ -378,8 +378,8 @@ new Promise((resolve) => {
 
         // Re-click Run all — if runtime is now ready this will start it;
         // if already running Colab ignores or re-confirms the click safely.
-        const reClick = await page.evaluate(scriptRunAll);
-        log(`[tick ${watchTick}] Run all: ${reClick}`);
+        // const reClick = await page.evaluate(scriptRunAll);
+        // log(`[tick ${watchTick}] Run all: ${reClick}`);
       } catch (err) {
         // Page may be navigating/reloading — not fatal
         log(`[tick ${watchTick}] Page eval error (may be navigating): ${err.message}`);
