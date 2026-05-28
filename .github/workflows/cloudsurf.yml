@@ -10,7 +10,7 @@ on:
       run_time:
         description: "Seconds to let scripts run after browsers are up (default: 300)"
         required: false
-        default: "300"
+        default: "60"
 
 jobs:
   run:
@@ -61,7 +61,7 @@ jobs:
             exit 1
           fi
           echo "Drive file ID: $FILE_ID"
-          gdown --id "$FILE_ID" -O /tmp/profiles.zip --fuzzy
+          gdown "https://drive.google.com/uc?export=download&id=$FILE_ID" -O /tmp/profiles.zip
 
           echo "Unzipping..."
           unzip -q /tmp/profiles.zip -d ./profiles_tmp
