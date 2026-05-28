@@ -378,8 +378,8 @@ new Promise((resolve) => {
 
         // Re-click Run all — if runtime is now ready this will start it;
         // if already running Colab ignores or re-confirms the click safely.
-        const reClick = await page.evaluate(scriptRunAll);
-        log(`[tick ${watchTick}] Run all: ${reClick}`);
+        // const reClick = await page.evaluate(scriptRunAll);
+        // log(`[tick ${watchTick}] Run all: ${reClick}`);
       } catch (err) {
         // Page may be navigating/reloading — not fatal
         log(`[tick ${watchTick}] Page eval error (may be navigating): ${err.message}`);
