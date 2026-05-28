@@ -10,14 +10,14 @@ on:
       run_time:
         description: "Seconds to let scripts run after browsers are up (default: 300)"
         required: false
-        default: "60"
+        default: "7200"
 
 jobs:
   run:
     runs-on: ubuntu-latest
     # Total job timeout — setup (~3 min) + run_time + buffer.
     # Increase this if your scripts need longer. Max GitHub allows is 360 min.
-    timeout-minutes: 30
+    timeout-minutes: 330
 
     steps:
       # ── 1. Checkout ──────────────────────────────────────────────────────────
