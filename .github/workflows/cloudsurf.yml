@@ -6,7 +6,7 @@ on:
       script:
         description: "Script to run (e.g. colab_run_all, youtube_warmup)"
         required: true
-        default: "colab_run_all"
+        default: "colab_keep_alive"
       run_time:
         description: "Seconds to let scripts run after browsers are up (default: 300)"
         required: false
