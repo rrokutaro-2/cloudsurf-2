@@ -282,11 +282,6 @@ new Promise((resolve) => {
       try { await dialog.accept(); } catch (_) {}
     });
 
-    // ── Dismiss any popups on initial load ────────────────────────────────
-    log('Dismissing any startup popups ...');
-    let dismissed = await page.evaluate(scriptDismissPopups);
-    log(`Popup sweep: ${dismissed}`);
-
     // ── Step 1: Open the notebook ─────────────────────────────────────────
     if (NOTEBOOK) {
       log(`Looking for notebook: "${NOTEBOOK}" ...`);
@@ -323,7 +318,7 @@ new Promise((resolve) => {
 
     // ── Step 2: Dismiss popups ────────────────────────────────────────────
     log('Dismissing any pre-run popups ...');
-    dismissed = await page.evaluate(scriptDismissPopups);
+    let dismissed = await page.evaluate(scriptDismissPopups);
     log(`Pre-run popup sweep: ${dismissed}`);
 
     // ── Step 3: Click "Connect" if present ───────────────────────────────
