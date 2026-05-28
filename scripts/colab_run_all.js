@@ -5,8 +5,9 @@
  * 2. Dismisses any Colab popups/warnings (storage, session, etc.)
  * 3. Finds and clicks a specific notebook by name (CLOUDSURF_NOTEBOOK)
  * 4. Handles any "leave page" browser dialog
- * 5. Clicks "Run all" using findDeep (Shadow DOM aware)
- * 6. Stays alive polling for popups until the notebook finishes running
+ * 5. Clicks "Connect" button if present (pre-step before Run all)
+ * 6. Clicks "Run all" using findDeep (Shadow DOM aware)
+ * 7. Stays alive polling for popups until the notebook finishes running
  *
  * Env vars:
  *   CLOUDSURF_CDP_PORT     CDP port (injected by CloudSurf)
@@ -66,7 +67,7 @@ function clickDeepByText(word, root = document, clickAll = false) {
 `;
 
 // ── findDeep ──────────────────────────────────────────────────────────────────
-// Exact-match version used for "Run all" button.
+// Exact-match version used for "Run all" and "Connect" buttons.
 const FN_FIND_DEEP = `
 function findDeep(root, targetText) {
   if (root.textContent && root.textContent.trim().toLowerCase() === targetText.toLowerCase()) {
@@ -195,6 +196,19 @@ const scriptIsRunning = `
   return !!progress;
 })();
 `;
+
+// ── Connect button (pre-step before Run all) ──────────────────────────────────
+// Looks for an exact "Connect" button only — ignores "Connecting", "Reconnect",
+// "Connected", etc. Clicks it if found. Non-fatal if absent.
+const scriptClickConnect = `
+(function() {
+  ${FN_FIND_DEEP}
+  const btn = findDeep(document.querySelector('*'), 'Connect');
+  if (btn) { btn.click(); return 'clicked'; }
+  return 'not_found';
+})();
+`;
+
 const scriptRunAll = `
 (function() {
   ${FN_FIND_DEEP}
@@ -307,11 +321,24 @@ new Promise((resolve) => {
       log('No CLOUDSURF_NOTEBOOK set — skipping notebook selection');
     }
 
-    // ── Step 2: Dismiss popups then Run all ───────────────────────────────
+    // ── Step 2: Dismiss popups ────────────────────────────────────────────
     log('Dismissing any pre-run popups ...');
     dismissed = await page.evaluate(scriptDismissPopups);
     log(`Pre-run popup sweep: ${dismissed}`);
 
+    // ── Step 3: Click "Connect" if present ───────────────────────────────
+    // This is a best-effort pre-step. "Connect" may not be present if the
+    // runtime is already connected or auto-connects — that is fine, we
+    // proceed either way.
+    log('Checking for "Connect" button (pre-step) ...');
+    const connectResult = await page.evaluate(scriptClickConnect);
+    log(`Connect button: ${connectResult}`);
+    if (connectResult === 'clicked') {
+      // Brief pause to let the connection handshake start before Run all
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
+    // ── Step 4: Attempting "Run all" click ────────────────────────────────
     log('Attempting "Run all" click ...');
     let runResult = await page.evaluate(scriptRunAll);
     log(`Immediate Run all: ${runResult}`);
@@ -329,7 +356,7 @@ new Promise((resolve) => {
 
     log('"Run all" clicked — will keep re-clicking every 10-15s in case runtime was not ready ...');
 
-    // ── Step 3: Re-click Run all every 10-15s + dismiss popups ───────────
+    // ── Step 5: Re-click Run all every 10-15s + dismiss popups ───────────
     // Colab's "Run all" button exists in the DOM before the runtime is
     // actually connected, so the first click can land on a not-yet-ready
     // runtime and silently do nothing. Re-clicking every 10-15s ensures
