@@ -327,38 +327,44 @@ new Promise((resolve) => {
       process.exit(1);
     }
 
-    log('"Run all" clicked — watching for popups while notebook runs ...');
+    log('"Run all" clicked — will keep re-clicking every 10-15s in case runtime was not ready ...');
 
-    // ── Step 3: Watch for popups while notebook is running ────────────────
-    // Poll every 15s: dismiss any popups that appear during execution.
-    // We don't try to detect when it's "done" — we just watch for 6 hours
-    // max then exit. The xdotool keepalive in manager.py handles Colab
-    // session heartbeats; our job here is just popup cleanup.
-    const WATCH_INTERVAL_MS  = 15000;   // check every 15s
-    const WATCH_MAX_MS       = 6 * 60 * 60 * 1000; // 6 hour hard cap
+    // ── Step 3: Re-click Run all every 10-15s + dismiss popups ───────────
+    // Colab's "Run all" button exists in the DOM before the runtime is
+    // actually connected, so the first click can land on a not-yet-ready
+    // runtime and silently do nothing. Re-clicking every 10-15s ensures
+    // at least one click lands while the runtime is live.
+    // launch.py's RUN_TIME hard-kills this process, so the 6h cap below
+    // is just a safety net — we'll be killed long before that.
+    const WATCH_INTERVAL_BASE_MS = 10000;  // 10s base
+    const WATCH_INTERVAL_JITTER  =  5000;  // +0-5s random jitter -> 10-15s total
+    const WATCH_MAX_MS           = 6 * 60 * 60 * 1000; // safety cap
     const watchStart = Date.now();
     let watchTick = 0;
 
     while (Date.now() - watchStart < WATCH_MAX_MS) {
-      await new Promise(r => setTimeout(r, WATCH_INTERVAL_MS));
+      const interval = WATCH_INTERVAL_BASE_MS + Math.floor(Math.random() * WATCH_INTERVAL_JITTER);
+      await new Promise(r => setTimeout(r, interval));
       watchTick++;
 
       try {
+        // Dismiss any popups first so they don't block the button
         const sweep = await page.evaluate(scriptDismissPopups);
         if (sweep !== 'none') {
-          log(`[watch tick ${watchTick}] Dismissed popup: ${sweep}`);
-        } else if (watchTick % 20 === 0) {
-          // Log a heartbeat every ~5 min so logs show it's still alive
-          const elapsed = Math.round((Date.now() - watchStart) / 60000);
-          log(`[watch tick ${watchTick}] Still watching — ${elapsed}m elapsed, no popups`);
+          log(`[tick ${watchTick}] Dismissed popup: ${sweep}`);
         }
+
+        // Re-click Run all — if runtime is now ready this will start it;
+        // if already running Colab ignores or re-confirms the click safely.
+        const reClick = await page.evaluate(scriptRunAll);
+        log(`[tick ${watchTick}] Run all: ${reClick}`);
       } catch (err) {
-        // Page may have navigated or reloaded — that's okay
-        log(`[watch tick ${watchTick}] Page eval error (may be navigating): ${err.message}`);
+        // Page may be navigating/reloading — not fatal
+        log(`[tick ${watchTick}] Page eval error (may be navigating): ${err.message}`);
       }
     }
 
-    log('Watch period ended (6h cap reached).');
+    log('Watch period ended (6h safety cap reached).');
 
   } catch (err) {
     console.error(`[colab_run_all | ${PROFILE_ID}] Fatal: ${err.message}`);
