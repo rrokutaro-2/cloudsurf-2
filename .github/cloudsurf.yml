@@ -1,0 +1,79 @@
+name: CloudSurf
+
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: "Script to run (e.g. colab_run_all, youtube_warmup)"
+        required: true
+        default: "colab_run_all"
+      run_time:
+        description: "Seconds to let scripts run after browsers are up (default: 300)"
+        required: false
+        default: "300"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # Total job timeout — setup (~3 min) + run_time + buffer.
+    # Increase this if your scripts need longer. Max GitHub allows is 360 min.
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Cache Node deps ───────────────────────────────────────────────────
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: scripts/node_modules
+          key: node-${{ hashFiles('scripts/package.json') }}
+
+      # ── 3. Install Chrome ────────────────────────────────────────────────────
+      - name: Install Chrome
+        run: |
+          wget -q -O /tmp/chrome.deb \
+            https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y /tmp/chrome.deb 2>/dev/null || \
+            sudo apt-get install -yf 2>/dev/null
+          google-chrome --version
+
+      # ── 4. Install Node deps ─────────────────────────────────────────────────
+      - name: Install Node deps
+        run: npm install --prefix scripts
+
+      # ── 5. Download & unzip profiles from Google Drive ───────────────────────
+      - name: Download profiles
+        env:
+          PROFILES_ZIP_URL: ${{ secrets.PROFILES_ZIP_URL }}
+        run: |
+          echo "Downloading profiles zip..."
+          curl -L "$PROFILES_ZIP_URL" -o /tmp/profiles.zip
+          echo "Unzipping..."
+          unzip -q /tmp/profiles.zip -d ./profiles_tmp
+
+          # Handle whether the zip contains a single top-level folder or
+          # profile folders directly. We always want ./profiles/<profile_id>/
+          TOP=$(ls ./profiles_tmp | head -1)
+          if [ -d "./profiles_tmp/$TOP/chrome" ] || [ -f "./profiles_tmp/$TOP/meta.json" ]; then
+            # Already profile-level at top
+            mv ./profiles_tmp ./profiles
+          else
+            # One extra wrapper folder
+            mv "./profiles_tmp/$TOP" ./profiles
+            rm -rf ./profiles_tmp
+          fi
+
+          echo "Profiles found:"
+          ls ./profiles
+
+      # ── 6. Launch browsers & run script ─────────────────────────────────────
+      - name: Run CloudSurf
+        env:
+          CLOUDSURF_SCRIPT:   ${{ github.event.inputs.script }}
+          CLOUDSURF_NOTEBOOK: ${{ secrets.CLOUDSURF_NOTEBOOK }}
+          CLOUDSURF_RUN_TIME: ${{ github.event.inputs.run_time }}
+          PROFILES_DIR:       ./profiles
+        run: python launch.py
