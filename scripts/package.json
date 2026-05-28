@@ -1,0 +1,9 @@
+{
+  "name": "cloudsurf-scripts",
+  "version": "1.0.0",
+  "description": "Puppeteer automation scripts for CloudSurf profiles",
+  "private": true,
+  "dependencies": {
+    "puppeteer-core": "^22.0.0"
+  }
+}
