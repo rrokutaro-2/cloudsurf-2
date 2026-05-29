@@ -358,8 +358,8 @@ new Promise((resolve) => {
     // at least one click lands while the runtime is live.
     // launch.py's RUN_TIME hard-kills this process, so the 6h cap below
     // is just a safety net — we'll be killed long before that.
-    const WATCH_INTERVAL_BASE_MS = 10000;  // 10s base
-    const WATCH_INTERVAL_JITTER  =  5000;  // +0-5s random jitter -> 10-15s total
+    const WATCH_INTERVAL_BASE_MS = 25000;  // 25s base
+    const WATCH_INTERVAL_JITTER  =  5000;  // +0-5s random jitter -> 25-30s total
     const WATCH_MAX_MS           = 6 * 60 * 60 * 1000; // safety cap
     const watchStart = Date.now();
     let watchTick = 0;
@@ -378,8 +378,8 @@ new Promise((resolve) => {
 
         // Re-click Run all — if runtime is now ready this will start it;
         // if already running Colab ignores or re-confirms the click safely.
-        // const reClick = await page.evaluate(scriptRunAll);
-        // log(`[tick ${watchTick}] Run all: ${reClick}`);
+        const reClick = await page.evaluate(scriptRunAll);
+        log(`[tick ${watchTick}] Run all: ${reClick}`);
       } catch (err) {
         // Page may be navigating/reloading — not fatal
         log(`[tick ${watchTick}] Page eval error (may be navigating): ${err.message}`);
