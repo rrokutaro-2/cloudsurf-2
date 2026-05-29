@@ -1,16 +1,13 @@
 /**
  * colab_keep_alive.js
  *
- * 1. Connects to a running Chrome instance via CDP
- * 2. Finds an open Colab tab (or navigates to Colab)
- * 3. Keeps the session alive indefinitely via:
- *    - Random mouse movements across the page
- *    - Random right-clicks (context menu open + close)
- *    - Random scrolling (up/down)
- *    - Passive popup dismissal (same logic as colab_run_all)
+ * Keeps an already-open Colab session alive via random mouse movements,
+ * right-clicks, scrolling, and passive popup dismissal.
  *
- * Does NOT click any interactive Colab UI elements, buttons, or links.
- * Safe to run against an already-running notebook.
+ * Assumes colab_run_all.js (or similar) has already handled navigation
+ * and notebook setup. This script does NOT navigate, reload, or touch
+ * any Colab UI controls — it only generates human-like activity on
+ * whatever page is currently open.
  *
  * Env vars:
  *   CLOUDSURF_CDP_PORT     CDP port (injected by CloudSurf)
@@ -24,13 +21,8 @@ const PROFILE_ID = process.env.CLOUDSURF_PROFILE_ID || '(unknown)';
 
 const log = (...a) => console.log(`[colab_keep_alive | ${PROFILE_ID}]`, ...a);
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 /** Random integer in [min, max] inclusive */
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-
-/** Random float in [min, max] */
-const randFloat = (min, max) => Math.random() * (max - min) + min;
 
 /** Sleep for ms milliseconds */
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -104,36 +96,28 @@ const scriptViewportSize = `
       defaultViewport: null,
     });
 
-    const pages = await browser.pages();
-    log(`${pages.length} tab(s) open`);
+    // Poll until colab_run_all has navigated to a Colab notebook URL.
+    // Both scripts start in parallel so we wait here rather than racing.
+    const COLAB_URL   = 'colab.research.google.com/drive/';
+    const POLL_MS     = 2000;
+    const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min max wait
+    const pollStart   = Date.now();
 
-    // Prefer an existing Colab tab
-    let page = pages.find(p => p.url().includes('colab.research.google.com'));
-    if (!page) {
-      log('No Colab tab found — using first tab');
-      page = pages[0];
+    log('Waiting for a Colab notebook tab to be ready ...');
+    let page = null;
+    while (Date.now() - pollStart < POLL_TIMEOUT_MS) {
+      const pages = await browser.pages();
+      page = pages.find(p => p.url().includes(COLAB_URL)) || null;
+      if (page) break;
+      await sleep(POLL_MS);
     }
+
     if (!page) {
-      log('No tabs open — cannot proceed');
+      log(`No Colab tab found after ${POLL_TIMEOUT_MS / 1000}s — giving up`);
       process.exit(1);
     }
 
-    // Navigate to Colab if needed (e.g. blank tab)
-    if (!page.url().includes('colab.research.google.com')) {
-      log('Navigating to Colab ...');
-      await page.goto('https://colab.research.google.com/', {
-        waitUntil: 'networkidle2',
-        timeout: 60000,
-      });
-    }
-
-    log(`Keeping alive: ${page.url()}`);
-
-    // Handle any unexpected "leave page" dialogs defensively
-    page.on('dialog', async (dialog) => {
-      log(`Browser dialog: "${dialog.message()}" — dismissing`);
-      try { await dialog.dismiss(); } catch (_) {}
-    });
+    log(`Colab tab ready: ${page.url()}`);
 
     // ── keep-alive loop ───────────────────────────────────────────────────
     // Interval between activity bursts: 20–40 seconds
@@ -148,7 +132,6 @@ const scriptViewportSize = `
       await sleep(wait);
       tick++;
 
-      // Guard: page may have been replaced / navigated
       try {
         // ── 1. Get current viewport dimensions ───────────────────────────
         let vp;
