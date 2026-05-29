@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
 CloudSurf Action Launcher
-Starts one headless Chrome per profile, runs the chosen script against each,
+Starts one headless Chrome per profile, runs the chosen script(s) against each,
 then exits. No Flask, no VNC, no keepalive threads.
 
 Usage (called by the workflow):
   python launch.py
 
 Env vars (set by the workflow):
-  CLOUDSURF_SCRIPT       script name, e.g. "colab_run_all" or "youtube_warmup"
+  CLOUDSURF_SCRIPT       script name or comma-separated list of script names,
+                         e.g. "colab_run_all" or "youtube_warmup,colab_keep_alive"
+                         Scripts are run sequentially per profile in the order given.
   CLOUDSURF_NOTEBOOK     notebook name passed through to colab_run_all.js
   CLOUDSURF_RUN_TIME     seconds to let scripts run before hard exit (default: 300)
   PROFILES_DIR           path to unzipped profiles (default: ./profiles)
@@ -19,7 +21,8 @@ from pathlib import Path
 
 PROFILES_DIR  = Path(os.environ.get("PROFILES_DIR", "./profiles"))
 SCRIPTS_DIR   = Path(__file__).parent / "scripts"
-SCRIPT_NAME   = os.environ.get("CLOUDSURF_SCRIPT", "colab_run_all").strip()
+# Support comma-separated list of script names; strip whitespace around each entry
+SCRIPT_NAMES  = [s.strip() for s in os.environ.get("CLOUDSURF_SCRIPT", "colab_run_all").split(",") if s.strip()]
 RUN_TIME      = int(os.environ.get("CLOUDSURF_RUN_TIME", "300"))  # seconds
 
 # CDP base port — each profile gets its own (9222, 9223, …)
@@ -89,8 +92,9 @@ def wait_for_cdp(cdp_port, timeout=20):
             time.sleep(0.5)
     return False
 
-def run_script(profile_id, cdp_port):
-    script_file = SCRIPT_NAME if SCRIPT_NAME.endswith(".js") else SCRIPT_NAME + ".js"
+def run_script(script_name, profile_id, cdp_port):
+    """Run a single named script against the given profile's Chrome instance."""
+    script_file = script_name if script_name.endswith(".js") else script_name + ".js"
     script_path = SCRIPTS_DIR / script_file
     if not script_path.exists():
         log(f"  ERROR: script not found: {script_path}")
@@ -116,21 +120,42 @@ def profile_worker(profile_id, cdp_port, chrome_bin):
     chrome = start_chrome(profile_id, cdp_port, chrome_bin)
 
     if not wait_for_cdp(cdp_port):
-        log(f"[{profile_id}] CDP never came up — skipping script")
+        log(f"[{profile_id}] CDP never came up — skipping scripts")
         chrome.terminate()
         return
 
-    run_script(profile_id, cdp_port)
+    # Run all scripts in parallel threads
+    script_threads = []
+    for script_name in SCRIPT_NAMES:
+        log(f"[{profile_id}] --- Launching script in parallel: {script_name} ---")
+        t = threading.Thread(target=run_script, args=(script_name, profile_id, cdp_port), daemon=True)
+        t.start()
+        script_threads.append(t)
+
+    # Wait for all scripts for this profile to finish
+    for t in script_threads:
+        t.join()
+
     # Don't terminate Chrome — let GH Actions kill everything on exit
     # so Colab/etc. stays alive in its own session after we disconnect.
 
 def main():
-    log(f"Script:   {SCRIPT_NAME}")
+    log(f"Scripts:  {', '.join(SCRIPT_NAMES)}")
     log(f"Run time: {RUN_TIME}s (hard exit after this)")
     log(f"Profiles: {PROFILES_DIR}")
 
     chrome_bin = find_chrome()
     log(f"Chrome:   {chrome_bin}")
+
+    # Validate all scripts exist before launching any Chrome instances
+    missing = []
+    for script_name in SCRIPT_NAMES:
+        script_file = script_name if script_name.endswith(".js") else script_name + ".js"
+        script_path = SCRIPTS_DIR / script_file
+        if not script_path.exists():
+            missing.append(str(script_path))
+    if missing:
+        raise RuntimeError(f"Script(s) not found: {', '.join(missing)}")
 
     profiles = discover_profiles()
     log(f"Found {len(profiles)} profile(s): {profiles}")
