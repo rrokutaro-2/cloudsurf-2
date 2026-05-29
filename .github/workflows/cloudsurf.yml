@@ -10,7 +10,7 @@ on:
       run_time:
         description: "Seconds to let scripts run after browsers are up (default: 300)"
         required: false
-        default: "7200"
+        default: "19800"
 
 jobs:
   run:
