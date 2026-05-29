@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       script:
-        description: "Script to run (e.g. colab_run_all, youtube_warmup)"
+        description: "Script(s) to run — single name or comma-separated list run sequentially (e.g. colab_run_all or youtube_warmup,colab_keep_alive)"
         required: true
-        default: "colab_keep_alive"
+        default: "colab_run_all,colab_keep_alive"
       run_time:
         description: "Seconds to let scripts run after browsers are up (default: 300)"
         required: false
